@@ -564,8 +564,7 @@ NavState StateMachine::executeTurnAroundObs()
 	}
 	if( !mPhoebe->roverStatus().obstacle().detected )
 	{
-		double distanceAroundObs = cvThresh / cos( fabs( degreeToRadian( mOriginalObstacleAngle ) ) );
-		mObstacleAvoidancePoint = createAvoidancePoint( distanceAroundObs );
+		createAvoidancePoint();
 		if( mPhoebe->roverStatus().currentState() == NavState::TurnAroundObs )
 		{
 			printf("here1\n");
@@ -677,20 +676,56 @@ bool StateMachine::addFourPointsToSearch()
 
 // Creates the odometry point to use to drive around in obstacle
 // avoidance.
-Odometry StateMachine::createAvoidancePoint( const double distance )
+void StateMachine::createAvoidancePoint()
 {
-	Odometry avoidancePoint = mPhoebe->roverStatus().odometry();
-	double totalLatitudeMinutes = avoidancePoint.latitude_min +
-		cos( degreeToRadian( avoidancePoint.bearing_deg ) ) * distance * LAT_METER_IN_MINUTES;
-	double totalLongitudeMinutes = avoidancePoint.longitude_min +
-		sin( degreeToRadian( avoidancePoint.bearing_deg ) ) * distance * mPhoebe->longMeterInMinutes();
-	avoidancePoint.latitude_deg += totalLatitudeMinutes / 60;
-	// avoidancePoint.latitude_min = mod( totalLatitudeMinutes, 60 );
-	avoidancePoint.latitude_min = ( totalLatitudeMinutes - ( ( (int) totalLatitudeMinutes) / 60 ) * 60 );
-	avoidancePoint.longitude_deg += totalLongitudeMinutes / 60;
-	// avoidancePoint.longitude_min = mod( totalLatitudeMinutes, 60 );
-	avoidancePoint.longitude_min = ( totalLongitudeMinutes - ( ( (int) totalLongitudeMinutes) / 60 ) * 60 );
-	return avoidancePoint;
+	// The distance to the obstacle
+	double cvThresh = mRoverConfig["cvThresh"].GetDouble();
+	// Find the distance to the point
+	double distance_to_avoidance_point = cvThresh / cos(degreeToRadian(mOriginalObstacleAngle));
+	// Current bearing from due north
+	double current_bearing = mPhoebe->roverStatus().odometry().bearing_deg;
+	// Convert bearing to angle from +x axis
+	double current_polar_bearing =  degreeToRadian(90 - current_bearing);
+	// The relative minutes from our current latitude to the avoidance point latitude
+	double latitude_offset = distance_to_avoidance_point * sin(current_polar_bearing) * LAT_METER_IN_MINUTES;
+	// The relative minutes form out current longitude to the avoidance point longitude
+	double longitude_offset = distance_to_avoidance_point * cos(current_polar_bearing ) * mPhoebe->longMeterInMinutes();
+
+
+	/** Modifying the obstacle avoidance point member to our 
+	current location with the calculated offsets */
+
+	// Getting the initial position of the rover so we can apply relative offsets
+	mObstacleAvoidancePoint = mPhoebe->roverStatus().odometry();
+
+	// Setting latitude of the avoidance point
+	mObstacleAvoidancePoint.latitude_min += latitude_offset;
+	// If the minutes exceeds 60 add 1 to the degrees
+	mObstacleAvoidancePoint.latitude_deg += (int)mObstacleAvoidancePoint.latitude_min / 60;
+	// Sets the new minutes to be only the minutes below 60
+	mObstacleAvoidancePoint.latitude_min = fmod(mObstacleAvoidancePoint.latitude_min, 60);
+
+	// Setting longitude of the avoidance point
+	mObstacleAvoidancePoint.longitude_min += longitude_offset;
+	// If the minutes exceeds 60 add 1 to the degrees
+	mObstacleAvoidancePoint.longitude_deg += (int)mObstacleAvoidancePoint.longitude_min / 60;
+	// Sets the new minutes to be only the minutes below 60
+	mObstacleAvoidancePoint.longitude_min = fmod(mObstacleAvoidancePoint.longitude_min, 60);
+
+	cout << " cur_lat_deg: " << mPhoebe->roverStatus().odometry().latitude_deg << endl;
+	cout << " cur_lat_min: " << mPhoebe->roverStatus().odometry().latitude_min << endl; 
+	cout << " cur_lon_deg: " << mPhoebe->roverStatus().odometry().longitude_deg << endl;
+	cout << " cur_lon_min: " << mPhoebe->roverStatus().odometry().longitude_min << endl; 
+
+	cout << " ap_lat_deg: " << mObstacleAvoidancePoint.latitude_deg << endl;
+	cout << " ap_lat_min: " << mObstacleAvoidancePoint.latitude_min << endl;
+	cout << " ap_lon_deg: " << mObstacleAvoidancePoint.longitude_deg << endl;
+	cout << " ap_lon_min: " << mObstacleAvoidancePoint.longitude_min << endl; 
+
+	cout << " Lat MiM: " << LAT_METER_IN_MINUTES << endl;
+	cout << " Lon MiM: " << mPhoebe->longMeterInMinutes() << endl;
+
+	cout << " OG_obstacle_angle: " << mOriginalObstacleAngle << endl; 
 }
 
 // thresholds based on state? waypoint vs ball

@@ -72,7 +72,7 @@ private:
 
 	bool addFourPointsToSearch();
 
-	Odometry createAvoidancePoint( const double distance );
+	void createAvoidancePoint();
 
 	/*************************************************************************/
 	/* Private Member Variables */
